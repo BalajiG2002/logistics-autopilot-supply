@@ -264,6 +264,46 @@ The agent actions are also published as Model Context Protocol tools (protocol `
 | Supplier Portal | Supplier | Confirm PO, add tracking, upload invoice |
 | Logistics Copilot | Ravi, Meena | Ask questions in chat or voice |
 
+### Screenshots
+
+Captured from the [live app](https://logistics-autopilot-supply.ai.studio/).
+
+**Overview Dashboard.** KPIs, live status tracker, manager exception queue and missing-document alerts.
+
+![Overview Dashboard](docs/screenshots/01-dashboard.png)
+
+**Orders & Tracking.** Every purchase order with its status and target date.
+
+![Orders and Tracking](docs/screenshots/02-orders.png)
+
+**Order detail.** The eight-step pipeline, approval reason, receipt and invoice state, and the audit log written by each agent.
+
+![Order detail](docs/screenshots/03-order-detail.png)
+
+**New Requisition.** Free text in, structured order out.
+
+![New Requisition](docs/screenshots/04-new-requisition.png)
+
+**Requisition result.** The Intake Agent parsed the text. The order is above the $2,500 limit, so the Approval Agent escalated it to Meena with a one-line summary.
+
+![Requisition result](docs/screenshots/05-requisition-result.png)
+
+**Receiving Dock.** Multimodal inspection classifies the damage and applies the supplier penalty. The order cannot close until the invoice arrives.
+
+![Receiving Dock](docs/screenshots/06-receiving-dock.png)
+
+**Manager Approvals and Supplier League.** The exception queue (each item has an AI executive summary), the policy settings (auto-approval limit, minimum supplier rating, chaser interval) and the supplier scorecard with failover ranks. The Supplier League screen shows the same scorecard.
+
+![Manager Approvals](docs/screenshots/07-manager-approvals.png)
+
+**Supplier Portal.** The supplier's view: confirm orders, upload invoices, and read the dispatch and chaser messages.
+
+![Supplier Portal](docs/screenshots/09-supplier-portal.png)
+
+**Logistics Copilot.** Ask why a supplier was downgraded and which one takes precedence.
+
+![Logistics Copilot](docs/screenshots/10-copilot.png)
+
 ### Try it in about two minutes
 
 1. Open the [live app](https://logistics-autopilot-supply.ai.studio/).
