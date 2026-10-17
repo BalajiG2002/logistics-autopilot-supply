@@ -1,0 +1,8 @@
+{
+  "name": "Logistics Autopilot - Supply Chain Agent System",
+  "description": "Autonomous Order-to-Delivery agent system with multimodal inspection, voice intake, MCP tool decoration, fast-flow auto-approvals, and self-healing feedback loop.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
