@@ -292,6 +292,10 @@ Captured from the [live app](https://logistics-autopilot-supply.ai.studio/).
 
 ![Receiving Dock](docs/screenshots/06-receiving-dock.png)
 
+**Receiving Dock with a custom photo.** Choose **Upload Custom Photo** and attach a real delivery photo (JPG, PNG or WebP, up to 10 MB). **Verify Damage with Gemini AI** returns a severity label (here SEVERE DAMAGE, 98% confidence), a written finding, the damaged quantity and the supplier score impact (-3.0 points). Submitting signs the GRN with the damaged units flagged and emails a defect claim to the supplier asking for an amended invoice.
+
+![Custom photo damage verification](docs/screenshots/11-custom-photo-damage-verification.png)
+
 **Manager Approvals and Supplier League.** The exception queue (each item has an AI executive summary), the policy settings (auto-approval limit, minimum supplier rating, chaser interval) and the supplier scorecard with failover ranks. The Supplier League screen shows the same scorecard.
 
 ![Manager Approvals](docs/screenshots/07-manager-approvals.png)
