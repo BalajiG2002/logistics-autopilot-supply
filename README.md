@@ -1,214 +1,339 @@
 # FreshMart Order-to-Delivery Autopilot
-### Autonomous Multi-Agent Supply Chain Management System Powered by Google Gemini
 
-[![System Status](https://img.shields.io/badge/Autopilot%20Engine-Active-10b981)](#)
-[![Model](https://img.shields.io/badge/Gemini%20API-gemini--3.8--flash-6366f1)](#)
-[![Protocol](https://img.shields.io/badge/MCP-2024--11--05-3b82f6)](#)
-[![Compliance](https://img.shields.io/badge/Dual--Doc%20Gate-100%25-059669)](#)
+**A team of AI agents that runs the whole purchase-order lifecycle: request, approval, supplier dispatch, chasing, delivery inspection, invoice matching and supplier scoring. Humans only step in for exceptions.**
 
----
+[![Live Demo](https://img.shields.io/badge/Live%20Demo-logistics--autopilot--supply.ai.studio-6366f1)](https://logistics-autopilot-supply.ai.studio/)
+[![Gemini](https://img.shields.io/badge/Google%20Gemini-gemini--3.8--flash-4285f4)](#8-technology-stack)
+[![MCP](https://img.shields.io/badge/MCP-2024--11--05-3b82f6)](#7-mcp-tool-registry)
+[![Stack](https://img.shields.io/badge/React%2019%20%2B%20Express-TypeScript-059669)](#8-technology-stack)
 
-## 1. Application Overview
-
-**FreshMart Order-to-Delivery Autopilot** is an enterprise-grade autonomous logistics management system designed to eliminate structural inefficiencies in corporate procurement and warehouse fulfillment. Operating on an 8-agent collaborative swarm, the platform autonomously orchestrates the complete order lifecycle—from natural language voice requisitioning and rule-based policy auto-approvals to dynamic vendor routing, multimodal damaged goods inspection, and closed-loop self-healing failover.
-
-### Key Capabilities
-- **Natural Language & Voice Requisitioning:** Warehouse staff can create structured procurement orders using conversational voice dictation or free-form text.
-- **Fast-Flow Policy Engine:** Requisitions compliant with enterprise policy ($\le \$2,500$ USD with qualified vendors $\ge 7.0/10$) are auto-approved and dispatched in milliseconds without manual bottlenecks.
-- **Manager Exception Routing:** High-value requisitions and low-scoring suppliers are escalated to management with a 1-line AI executive summary for 1-click decisions.
-- **Multimodal Visual Inspection:** Loading dock personnel inspect delivered cargo photos using Google Gemini Vision, classifying packaging tears, crushed cartons, and spillage.
-- **Closed-Loop Self-Healing:** The system dynamically recalculates vendor scores and automatically re-routes subsequent purchase orders away from degrading suppliers.
-- **Complete Flow Guarantee:** An unbreachable state machine invariant prevents purchase orders from closing until both the physical Goods Receipt Note (GRN) and the Commercial Invoice are verified.
-- **Model Context Protocol (MCP):** Core supply chain tools are decorated and exposed via standard MCP JSON-RPC schemas for cross-agent interoperability.
+**Live app:** https://logistics-autopilot-supply.ai.studio/
 
 ---
 
-## 2. Problem Statement
+## Contents
 
-Traditional supply chain operations at mid-to-large retail and distribution enterprises suffer from systemic operational drag:
-
-### The Industry Challenge
-1. **Coordination Latency:** Simple internal requisitions often wait 48 to 72 hours for email approvals because managers are caught in operational meetings.
-2. **Communication Gaps & Unresponsive Vendors:** When external suppliers delay confirmation or shipping, follow-up depends entirely on manual phone calls and uncoordinated emails.
-3. **Orphan Orders & Incomplete Paperwork:** Cargo is received on the dock, but supplier invoices are delayed, lost, or never matched. Orders remain open in enterprise ledgers for months, causing reconciliation nightmares.
-4. **Zero Quality Feedback:** When a supplier delivers damaged cargo (e.g., torn sacks, moisture damage), the incident is handled as an isolated customer service complaint. Procurement managers remain unaware, continuing to place high-volume orders with unreliable vendors.
-
-### The FreshMart Use Case
-- **The Buyer:** FreshMart Central Supermarket Distribution Hub.
-- **The Handler (Ravi):** Warehouse logistics officer on dock #4 managing inventory shortages and physical receiving.
-- **The Manager (Meena):** Procurement director setting spend thresholds and supervising supplier contracts.
-- **The Suppliers:**
-  - *Sunrise Rice Co.:* Incumbent grain supplier with declining quality.
-  - *Golden Grain Corp:* High-reliability organic grain supplier (Failover target).
-  - *Apex Agri Logistics:* Bulk flour and pulses supplier.
+1. [The 30-second version](#1-the-30-second-version)
+2. [Problem statement](#2-problem-statement)
+3. [How we clarified and solved it](#3-how-we-clarified-and-solved-it)
+4. [Architecture](#4-architecture)
+5. [Order lifecycle](#5-order-lifecycle)
+6. [The agents, one by one](#6-the-agents-one-by-one)
+7. [MCP tool registry](#7-mcp-tool-registry)
+8. [Technology stack](#8-technology-stack)
+9. [Screens and demo walkthrough](#9-screens-and-demo-walkthrough)
+10. [API reference](#10-api-reference)
+11. [Run locally](#11-run-locally)
+12. [Project structure](#12-project-structure)
+13. [Known limitations](#13-known-limitations)
 
 ---
 
-## 3. The Autonomous Flow
+## 1. The 30-second version
 
-### System Architecture Flowchart
+| | |
+|---|---|
+| **Who** | FreshMart, a supermarket distribution hub. Three roles: **Ravi** (warehouse handler), **Meena** (procurement manager) and the **suppliers**. |
+| **Pain** | Orders wait days for approval, suppliers go silent, invoices go missing, and bad deliveries never change which supplier gets the next order. |
+| **Idea** | Give each step of the process to a dedicated agent. Rules make the decisions that must be predictable (approval, closing an order, scoring). Gemini handles the messy parts (reading free text, looking at photos, writing summaries). |
+| **Result** | Routine orders go from request to supplier purchase order with no human step. Meena sees only exceptions, each with a one-line AI summary. No order can close without proof of delivery and an invoice. Suppliers who deliver damaged goods are scored down and stop receiving new orders. |
+
+---
+
+## 2. Problem statement
+
+Mid-size distribution businesses lose time and money in four places:
+
+| # | Problem | What it looks like today | Cost |
+|---|---------|--------------------------|------|
+| 1 | **Approval latency** | A simple requisition sits in a manager's inbox for 48 to 72 hours. | Stock-outs, rushed buying |
+| 2 | **Silent suppliers** | Nobody confirms or ships. Staff chase by phone and email. | Hours of manual follow-up per order |
+| 3 | **Orphan orders** | Goods arrive, the invoice never does, and the order stays open for months. | Reconciliation and audit problems |
+| 4 | **No quality feedback** | A supplier ships torn sacks. The incident is handled once and forgotten. The next order goes to the same supplier. | Repeated losses |
+
+### The FreshMart scenario
+
+- **Buyer:** FreshMart Central Distribution Hub
+- **Ravi:** logistics handler at the dock, raises requests and receives goods
+- **Meena:** procurement manager, sets spend policy and handles exceptions
+- **Suppliers (seed data, score out of 10):** Sunrise Rice Co. (8.2), Golden Grain Corp (9.3), Apex Agri Logistics (8.7), Valley Dairy & Provisions (9.1), Metro Pack & Storage (6.8)
+
+---
+
+## 3. How we clarified and solved it
+
+We broke the vague goal "automate procurement" into the four concrete problems above. For each one we asked what actually goes wrong, who should decide, and whether the decision can be a rule or needs AI. That gave us one agent or guard per problem.
+
+| Problem | Clarifying question | Decision | Solved by |
+|---------|--------------------|----------|-----------|
+| Approval latency | Does every order really need a human? | No. Small orders from good suppliers follow a fixed policy. Only exceptions need a person. | **Approval Agent**: a rule check (value ≤ limit and supplier score ≥ minimum). Exceptions go to Meena with a Gemini-written one-line summary. |
+| Typing and form friction | Can staff just say what they need? | Yes. Free text or voice should become a structured order. | **Intake Agent**: Gemini turns "need 500 bags of rice by Friday" into JSON. A regex fallback works without an API key. |
+| Silent suppliers | Who follows up, and when do we escalate? | A machine follows up. A human is told only after repeated silence. | **Tracker Agent** (finds stalled orders) and **Chaser Agent** (reminders, escalation after 2). |
+| Orphan orders | What must be true before an order can close? | Both a goods receipt and a commercial invoice. | **Complete-Flow Gate** in `POST /api/po/close`: closing is rejected with HTTP 400 unless both exist. |
+| No quality feedback | How does a bad delivery change future behaviour? | Update the supplier score, and routing picks the best score. | **Inspection Agent** (Gemini Vision), **Outcome Agent** (score formula), **Self-Healing** (a low score flags the supplier, so new orders pick another one). |
+| Manager overload | How does Meena stay informed without reading everything? | A weekly briefing and a chat assistant. | **Insight Agent** and **Logistics Copilot**. |
+
+**Design rule we followed:** rules decide, AI assists. Approval, closing and scoring are deterministic, so they can be audited and tested. AI is used where input is unstructured (text, photos) or where a human reader needs a summary. If Gemini is unavailable, every AI step has a fallback and the demo keeps working.
+
+---
+
+## 4. Architecture
+
 ```mermaid
-flowchart TD
-    subgraph Buyer_Enterprise [FreshMart Central Distribution Hub]
-        Ravi[Ravi: Voice / Text Requisition] --> Intake[1. Intake Agent: Gemini NLP & Schema Extraction]
-        Intake --> Approval[2. Approval Agent: Deterministic Policy Rule Check]
-        Approval -->|Value <= Limit & Score >= 7.0| Dispatch[3. Dispatch Agent: Dynamic Vendor Routing]
-        Approval -->|Value > Limit or Score < 7.0| Meena[Meena: Exception Queue with 1-Line AI Summary]
-        Meena -->|1-Click Approved| Dispatch
-        Meena -->|Rejected| Denied[Requisition Terminated]
+flowchart LR
+    subgraph Users[People]
+        Ravi[Ravi<br/>Handler]
+        Meena[Meena<br/>Manager]
+        Sup[Supplier<br/>Portal]
     end
 
-    subgraph External_Suppliers [Outside Supply Base]
-        Dispatch -->|Automated Outbound PO Email| Vendor[Supplier Portal: Sunrise / Golden Grain / Apex]
-        Vendor -->|Confirm SLA| Tracker[4. Tracker Agent: SLA & Document Auditor]
-        Vendor -->|Ship Goods & Tracking| ReceivingDock[Warehouse Receiving Dock #4]
-        Vendor -->|Commercial Invoice Upload| DualDocGate{Dual-Doc Complete Gate}
+    subgraph FE[Frontend: React 19 + Vite + Tailwind]
+        Screens[Dashboard, Orders, New Requisition,<br/>Receiving Dock, Approvals,<br/>Supplier League, Supplier Portal, Copilot]
+        Voice[Web Speech API<br/>voice in and out]
     end
 
-    subgraph Self_Healing_Loop [Closed-Loop Quality Learning]
-        ReceivingDock -->|Cargo Photo Upload| Vision[5. Multimodal Inspection Agent: Gemini Vision]
-        Vision --> Outcome[6. Outcome Agent: Mathematical Scoring Formula]
-        Outcome --> SelfHeal[7. Self-Healing Agent: Dynamic Failover Reroute]
-        SelfHeal -.->|Auto-Diverts Future Orders to Golden Grain| Dispatch
-        Tracker -->|Step Idle > 24h| Chaser[8. Chaser Agent: Progressive Escalation]
-        ReceivingDock -->|Goods Receipt Note Issued| DualDocGate
-        DualDocGate -->|Both Receipt + Invoice Present| ClosedLedger[CLOSED & ARCHIVED IN LEDGER]
+    subgraph BE[Backend: Node + Express]
+        API[REST API<br/>server.ts]
+        subgraph Agents[Agent layer: server/agents/logisticsAgents.ts]
+            A1[Intake]
+            A2[Approval]
+            A3[Dispatch]
+            A4[Tracker]
+            A5[Chaser]
+            A6[Inspection + Outcome]
+            A7[Insight]
+        end
+        MCP[MCP registry<br/>mcpRegistry.ts]
+        Rules[Rules and guards<br/>policy, scoring, close gate]
+        DB[(In-memory store<br/>POs, suppliers, emails, step logs)]
     end
+
+    Gemini[[Google Gemini<br/>text + vision]]
+
+    Ravi --> Screens
+    Meena --> Screens
+    Sup --> Screens
+    Voice --> Screens
+    Screens -->|HTTP /api/*| API
+    API --> Agents
+    API --> MCP
+    MCP --> Agents
+    Agents --> Rules
+    Agents --> DB
+    Rules --> DB
+    A1 -.-> Gemini
+    A2 -.->|exception summary| Gemini
+    A6 -.->|photo analysis| Gemini
+    A7 -.-> Gemini
 ```
 
-### Deterministic State Machine (The Complete Flow Guarantee)
-An order must follow strict sequential milestone transitions. An order **cannot** transition to `CLOSED` without both the physical Goods Receipt Note (GRN) and the Commercial Invoice verified:
+**Reading the diagram**
+
+- **Frontend** has one screen per role task. Voice input uses the browser's Web Speech API.
+- **API layer** (`server.ts`) is thin. It validates input, calls an agent, and returns the updated order.
+- **Agent layer** holds the business logic. Each agent updates the order and appends a line to the audit trail (`stepLogs`), so you can always see who did what.
+- **Rules and guards** are plain code, not AI: policy thresholds, the scoring formula and the close gate.
+- **MCP registry** exposes the agent actions as standard tools, so other AI clients can call them.
+- **Gemini** is optional. Dotted lines mean "uses AI when a key is configured, otherwise falls back to rules".
+
+### End-to-end flow
+
+```mermaid
+flowchart TD
+    R["Ravi: 'Need 500 bags of rice by Friday'"] --> I[1. Intake Agent<br/>text or voice becomes structured PO]
+    I --> AP{2. Approval Agent<br/>value within limit AND<br/>supplier score above minimum?}
+    AP -->|Yes: auto-approve| D[3. Dispatch Agent<br/>emails PO to supplier]
+    AP -->|No: exception| M[Meena's queue<br/>with 1-line AI summary]
+    M -->|Approve| D
+    M -->|Reject| X[REJECTED]
+    D --> S[Supplier confirms and ships<br/>Supplier Portal]
+    D -.->|no reply| C[5. Chaser Agent<br/>reminder, then escalate]
+    S --> G[Ravi receives goods<br/>Goods Receipt Note]
+    S --> INV[Supplier uploads invoice]
+    G --> V[6. Inspection Agent<br/>Gemini Vision on cargo photo]
+    V --> O[Outcome Agent<br/>update supplier score]
+    O -->|score below minimum| H[Self-healing<br/>flag supplier, new orders go elsewhere]
+    H -.-> AP
+    G --> T[4. Tracker Agent<br/>receipt + invoice present?]
+    INV --> T
+    T -->|both present| CL[CLOSED]
+    T -->|missing invoice| C
+```
+
+---
+
+## 5. Order lifecycle
+
+Every purchase order follows this state machine. The server enforces the closing rule, so it cannot be bypassed from the UI.
 
 ```mermaid
 stateDiagram-v2
-    [*] --> REQUESTED: Voice/Text Intake
-    REQUESTED --> APPROVED: Policy Compliant (<= $2.5k & Score >= 7.0)
-    REQUESTED --> PENDING_MANAGER: Policy Exception (> $2.5k or Low Score)
-    PENDING_MANAGER --> APPROVED: Manager 1-Click Approval
-    PENDING_MANAGER --> REJECTED: Manager Rejection
-    APPROVED --> ORDERED: Dispatch Agent Emits PO Contract
-    ORDERED --> CONFIRMED: Supplier Acknowledges SLA
-    CONFIRMED --> SHIPPED: Cargo Dispatched with Tracking
-    SHIPPED --> RECEIVED: Arrived at Dock & GRN Signed
-    RECEIVED --> DOCS_COMPLETE: Both GRN Receipt + Commercial Invoice Present
-    DOCS_COMPLETE --> CLOSED: Payment Settled & Archived
+    [*] --> REQUESTED: Intake Agent
+    REQUESTED --> APPROVED: policy pass (auto)
+    REQUESTED --> PENDING_MANAGER: policy exception
+    PENDING_MANAGER --> APPROVED: Meena approves
+    PENDING_MANAGER --> REJECTED: Meena rejects
+    APPROVED --> ORDERED: Dispatch Agent sends PO
+    ORDERED --> CONFIRMED: supplier confirms
+    CONFIRMED --> SHIPPED: supplier ships with tracking
+    SHIPPED --> RECEIVED: Ravi signs goods receipt
+    RECEIVED --> DOCS_COMPLETE: receipt AND invoice present
+    DOCS_COMPLETE --> CLOSED: close gate passes
     CLOSED --> [*]
     REJECTED --> [*]
 ```
 
 ---
 
-## 4. Agent Definitions
+## 6. The agents, one by one
 
-| Agent | Technology | Operational Function | Input $\to$ Output |
-|---|---|---|---|
-| **Intake Agent** | Google Gemini (`gemini-3.8-flash`) + Web Speech API | Transcribes spoken audio or unstructured text (e.g. *"Need 500 bags of rice by Friday"*) and normalizes it into a validated JSON schema `{ item, quantity, unit, estimatedValue, neededBy, itemCategory }`. Falls back to an offline heuristic if disconnected. | Unstructured Audio/Text $\to$ Validated Purchase Order (`REQUESTED`) |
-| **Approval Agent** | Deterministic Rule Engine + Gemini NLP | Evaluates policy parameters: If `estimatedValue <= policyLimit` AND `supplier.score >= minScore`, marks order `APPROVED`. For exceptions, prompts Gemini for a 1-line executive recommendation. | Requisition $\to$ `APPROVED` (Fast Flow) or `PENDING_MANAGER` |
-| **Dispatch Agent** | Multi-Factor Supplier Evaluator | Evaluates qualified suppliers for the commodity category based on dynamic rolling score, binds the winning vendor, issues purchase order metadata, and dispatches the formal PO email. | Approved PO $\to$ Outbound PO Email & `ORDERED` Status |
-| **Tracker Agent** | SLA & Invariant Auditor | Continuously scans database state. Detects idle steps (>24h). Enforces the dual-document completeness gate (checks for Goods Receipt + Commercial Invoice). | Active Database $\to$ SLA Alerts & Document Invariant Reports |
-| **Chaser Agent** | Automated Communications Agent | Identifies stalled orders (unconfirmed POs or missing invoices) and issues progressive automated reminders (24h/48h). Escalate to Meena after 2 unanswered chases. | Stalled PO $\to$ Supplier Reminder Email & Manager Escalation |
-| **Multimodal Inspection Agent** | Gemini Multimodal Vision (`gemini-3.8-flash`) | Analyzes loading dock pallet photography. Classifies defect severity (`NONE`, `LOW`, `MODERATE`, `SEVERE`), identifies damage modes (e.g., torn burlap seams, grain spillage), and computes penalty points. | Cargo Photo + Damaged Bags Count $\to$ Defect Audit Report |
-| **Outcome Agent** | Mathematical Scoring Engine | Updates supplier reliability score using a weighted rolling average formula: $\text{score} = 10 \times (0.6 \times \text{onTimeRate} + 0.4 \times (1 - \text{damageRate}))$. | Defect Audit $\to$ Adjusted Supplier Scorecard |
-| **Self-Healing Agent** | Closed-Loop Autonomous Failover | If a vendor's score drops below the policy threshold ($< 7.0/10$), marks the vendor for review and automatically re-routes subsequent procurement requisitions to the highest-scoring alternative (e.g. Golden Grain Corp). | Vendor Downgrade $\to$ Dynamic Routing Rule Update |
-| **Insight Agent** | Google Gemini (`gemini-3.8-flash`) | Aggregates database metrics (cycle times, auto-approval percentage, vendor score trends) and synthesizes executive weekly briefings for Meena. | System Metrics $\to$ Executive Markdown Briefing |
-| **Logistics Copilot** | Gemini NLP + Web Speech Synthesis | Interactive voice and chat assistant for logistics handlers and managers. Queries inventory, explains vendor score changes, and suggests operational interventions. | Natural Query $\to$ Spoken Audio & Text Guidance |
+The table separates what is **AI** from what is **a rule**.
 
----
+| # | Agent | Trigger | What it does | AI or rules |
+|---|-------|---------|--------------|-------------|
+| 1 | **Intake** | `POST /api/intake` | Reads free text or voice and extracts item, quantity, unit, estimated value, needed-by date and category. Creates the PO in `REQUESTED`. | Gemini (JSON output). Regex fallback if there is no key or parsing fails. |
+| 2 | **Approval** | Right after intake | Picks the best-scoring supplier for the category, then checks `value <= autoApprovalValueLimit` and `score >= minimumSupplierScore`. Pass: `APPROVED` and auto-dispatch. Fail: `PENDING_MANAGER`. | **Rules** decide. Gemini only writes the one-line summary for Meena (templated text without a key). |
+| 3 | **Dispatch** | After approval (auto or manual) | Moves the PO to `ORDERED` and creates the outbound purchase-order email to the supplier. | Rules and templates |
+| 4 | **Tracker** | Scheduler tick | Scans received orders. Flags those missing a goods receipt or invoice. Advances complete ones to `DOCS_COMPLETE`. | Rules |
+| 5 | **Chaser** | Scheduler tick | Sends reminders for orders stuck in `ORDERED` (no confirmation) or `RECEIVED` (no invoice). After `maxChasesBeforeEscalation` (default 2) it escalates to Meena. | Rules and templates |
+| 6 | **Inspection and Outcome** | Receiving Dock | Gemini Vision looks at the cargo photo and returns damage level, damage types, estimated damaged units and confidence. The Outcome step then updates the supplier score. | Gemini Vision. Heuristic fallback from the damaged-unit count you enter. The score update is a **formula**. |
+| 7 | **Self-Healing** | After each score update | If the new score is below the policy minimum, the supplier is set to `FLAGGED_REVIEW`. The Approval Agent picks the highest-scoring supplier that is not restricted, so new orders go to a better supplier. | Rules |
+| 8 | **Insight** | `GET /api/insights` | Writes a short weekly briefing for Meena from order and supplier metrics. | Gemini. Fixed sample briefing without a key. |
+| + | **Logistics Copilot** | Chat or voice | Answers questions such as "why did Sunrise's score drop?" with a short, actionable reply. | Gemini. Canned reply without a key. |
 
-## 5. How Agents Solve Supply Chain Inefficiencies
+### Supplier scoring formula
 
-### A. Eliminating Latency (The Fastest Flow)
-- **Traditional Flaw:** Routine orders languish in email inboxes for 48 hours awaiting manager review.
-- **Agent Solution:** The **Approval Agent** evaluates policy rules instantaneously. Standard replenishment requisitions under \$2,500 with qualified suppliers auto-approve and trigger the **Dispatch Agent** immediately. Turnaround is compressed from **48 hours to under 2 minutes**.
-- **Exception Speed:** When human review is required, the Approval Agent provides Meena with a concise 1-line AI summary, enabling 1-click approvals in under 5 seconds.
-
-### B. Eliminating Manual Oversight (Exception-Only Management)
-- **Traditional Flaw:** Managers are overwhelmed with hundreds of routine requisitions, resulting in rubber-stamping or severe backlogs.
-- **Agent Solution:** **78.4%** of requisitions pass through autonomous governance. Meena is only prompted when spend limits are exceeded or vendor ratings fall below acceptable thresholds.
-- **Automated Follow-ups:** Logistics handlers no longer spend hours drafting reminder emails; the **Chaser Agent** monitors response deadlines and sends escalating reminders automatically.
-
-### C. Eliminating the Lack of Feedback (The Self-Healing Loop)
-- **Traditional Flaw:** When bad deliveries arrive, staff resolve the immediate shipment but fail to update vendor ratings, leading to repeated quality failures with the same supplier.
-- **Agent Solution:** When Ravi marks 20 torn rice bags, the **Multimodal Inspection Agent** visually validates the damage, and the **Outcome Agent** recomputes Sunrise's rating:
-  $$\text{score} = 10 \times (0.6 \times 0.85 + 0.4 \times (1 - 0.20)) = 5.4 / 10$$
-  The **Self-Healing Agent** detects that Sunrise is below the 7.0 threshold, flags them for review, and **automatically routes the next rice requisition to Golden Grain Corp (Score 9.3/10)** with zero human intervention.
-
-### D. Eliminating Orphan Orders (The Complete Flow Guarantee)
-- **Traditional Flaw:** Physical goods arrive at the dock, but suppliers forget to email the commercial invoice, leaving orders open indefinitely.
-- **Agent Solution:** The state machine enforces the **Dual-Doc Gate**. An order cannot reach `CLOSED` without both the verified Goods Receipt Note (GRN) and the Commercial Invoice. The **Tracker Agent** flags incomplete records, and the **Chaser Agent** pursues the supplier until documentation is complete.
-
----
-
-## 6. Model Context Protocol (MCP) Tool Registry
-
-The platform exposes its internal agent actions via decorated Model Context Protocol (MCP) tool declarations conforming to the `2024-11-05` standard:
-
-```typescript
-// Example: Self-Healing Dynamic Failover MCP Tool Declaration
-{
-  name: "mcp_self_healing_failover",
-  category: "FEEDBACK_LOOP",
-  description: "Recalculates vendor score formula and reroutes subsequent requisitions to preferred alternatives.",
-  parameters: {
-    type: "object",
-    properties: {
-      supplierId: { type: "string", description: "Supplier identifier to audit" },
-      simulateDamageEvent: { type: "boolean", description: "Inject cargo damage event" }
-    },
-    required: ["supplierId"]
-  }
-}
+```
+score = 10 x ( 0.6 x onTimeRate + 0.4 x (1 - damageRate) )      clamped to 1.0 to 10.0
 ```
 
-Judges and developers can interactively test and execute all 8 registered MCP tools via the **MCP Protocol Console** in the application.
+`onTimeRate` and `damageRate` are rolling averages over up to the last 20 orders, so one bad delivery lowers a score gradually and repeated problems push it under the 7.0 threshold.
+
+### Default policy (editable by Meena in the UI)
+
+| Setting | Default |
+|---------|---------|
+| Auto-approval value limit | $2,500 |
+| Minimum supplier score | 7.0 / 10 |
+| Chase interval | 24 hours |
+| Max chases before escalation | 2 |
 
 ---
 
-## 7. Application Screens & User Journey
+## 7. MCP tool registry
 
-1. **Overview Dashboard (`/`):** Central executive command center featuring real-time KPI metrics, the interactive **Live Order Status Tracker Widget**, manager exception alerts, missing documentation notices, and the live agent event feed.
-2. **Orders & Live Tracking:** Comprehensive searchable and filterable procurement ledger (All, In Transit, Exceptions, At Dock, Closed). Clicking any order opens the detailed **Order Tracker Modal** with an 8-stage progress stepper and audit history.
-3. **New Requisition:** Warehouse intake terminal featuring Web Speech voice dictation and natural language text entry with instant AI auto-approval.
-4. **Receiving Dock:** Cargo physical receiving terminal featuring multimodal computer vision damage inspection, Goods Receipt Note issuance, and dual-document verification.
-5. **Manager Approvals:** Meena's exception queue with 1-line AI executive summaries, policy threshold controls, and weekly Gemini performance briefing generation.
-6. **Supplier League:** Vendor scorecards, on-time rates, damage penalties, and live failover routing indicators.
-7. **Supplier Portal:** External vendor view (Sunrise Rice Co. / Golden Grain) enabling third parties to confirm purchase orders, attach tracking numbers, and upload commercial invoices.
-8. **Logistics Copilot:** Conversational voice & text AI assistant capable of answering supply chain queries and speaking aloud via Web Audio.
+The agent actions are also published as Model Context Protocol tools (protocol `2024-11-05`) so other agents can use them. They are listed at `GET /api/mcp/tools` and run via `POST /api/mcp/execute`. The in-app **MCP Inspector** lets you try them.
 
----
-
-## 8. Technology Stack
-
-- **Frontend:** React 19, TypeScript, Tailwind CSS v4, Lucide React, Motion.
-- **Backend:** Node.js, Express, `tsx`.
-- **AI & Vision:** Google Gemini API (`gemini-3.8-flash`) via the `@google/genai` TypeScript SDK (server-side proxy with telemetric header `aistudio-build`).
-- **Voice & Audio:** Web Speech API (SpeechRecognition for dictation, SpeechSynthesis for voice responses).
-- **Protocol:** Model Context Protocol (MCP) JSON-RPC specification.
-- **Data Architecture:** In-memory reactive database with immutable step audit logging (`steps_log`).
+| Tool | Purpose |
+|------|---------|
+| `mcp_intake_order` | Parse a request into a structured PO |
+| `mcp_evaluate_approval_policy` | Run the approval policy check |
+| `mcp_dispatch_smart_route` | Choose a supplier and dispatch |
+| `mcp_tracker_audit_sla` | Audit stalled orders and missing documents |
+| `mcp_chaser_escalate` | Send reminders and escalate |
+| `mcp_multimodal_cargo_inspect` | Inspect cargo damage |
+| `mcp_self_healing_failover` | Recompute supplier score and reroute |
+| `mcp_generate_executive_insights` | Produce the weekly briefing |
 
 ---
 
-## 9. Getting Started
+## 8. Technology stack
 
-### Prerequisites
-- Node.js 20+
-- Google Gemini API Key (configured in environment or `.env`)
+| Layer | Technology |
+|-------|------------|
+| Frontend | React 19, TypeScript, Vite, Tailwind CSS v4, Lucide React, Motion |
+| Backend | Node.js, Express, `tsx` |
+| AI | Google Gemini (`gemini-3.8-flash`) through `@google/genai`: text, JSON output and vision |
+| Voice | Browser Web Speech API (dictation and spoken replies) |
+| Protocol | Model Context Protocol tool declarations |
+| Data | In-memory store with an append-only step log for audit |
+| Hosting | Google AI Studio: https://logistics-autopilot-supply.ai.studio/ |
 
-### Installation & Run
+---
+
+## 9. Screens and demo walkthrough
+
+| Screen | Who uses it | Purpose |
+|--------|-------------|---------|
+| Overview Dashboard | Everyone | KPIs, live order tracker, alerts, agent activity feed |
+| Orders & Tracking | Everyone | Search and filter orders, open the order timeline and audit history |
+| New Requisition | Ravi | Type or speak a request |
+| Receiving Dock | Ravi | Sign goods receipt, upload a cargo photo, run damage inspection |
+| Manager Approvals | Meena | Exception queue, policy settings, weekly briefing |
+| Supplier League | Meena | Supplier scores, on-time rate, damage rate, status |
+| Supplier Portal | Supplier | Confirm PO, add tracking, upload invoice |
+| Logistics Copilot | Ravi, Meena | Ask questions in chat or voice |
+
+### Try it in about two minutes
+
+1. Open the [live app](https://logistics-autopilot-supply.ai.studio/).
+2. **New Requisition:** enter `Need 500 bags of rice by Friday`. If the value is within policy, the order is approved and dispatched with no human step.
+3. **New Requisition:** enter a larger order such as `Need 5000 bags of rice`. It lands in **Manager Approvals** with an AI summary. Approve it.
+4. **Supplier Portal:** confirm and ship the order, then upload an invoice.
+5. **Receiving Dock:** sign the goods receipt, then run inspection with a photo or a damaged-unit count.
+6. **Supplier League:** watch the supplier score change. Below 7.0 the supplier is flagged and new orders go elsewhere.
+7. **Orders:** try to close an order with only a receipt or only an invoice. It is rejected. With both, it closes.
+8. Click **Reset Demo Data** in the sidebar to start again.
+
+---
+
+## 10. API reference
+
+| Method | Endpoint | Purpose |
+|--------|----------|---------|
+| GET | `/api/state` | Suppliers, orders, latest logs and emails, policy, stats |
+| POST | `/api/intake` | Intake then approval for a free-text request |
+| POST | `/api/approval/action` | Manager `APPROVE` or `REJECT` |
+| POST | `/api/supplier/action` | Supplier `CONFIRM`, `SHIP`, `UPLOAD_INVOICE` |
+| POST | `/api/delivery/receive` | Goods receipt at the dock |
+| POST | `/api/delivery/inspect` | Damage inspection and score update |
+| POST | `/api/po/close` | Close an order (needs receipt and invoice) |
+| POST | `/api/scheduler/tick` | Run Tracker and Chaser |
+| POST | `/api/policy/update` | Change policy thresholds |
+| GET | `/api/insights` | Weekly briefing |
+| GET | `/api/mcp/tools` | List MCP tools |
+| POST | `/api/mcp/execute` | Run an MCP tool |
+| POST | `/api/copilot/chat` | Copilot reply |
+| POST | `/api/reset` | Reset demo data |
+
+---
+
+## 11. Run locally
+
+Requirements: Node.js 20 or newer. A Gemini API key is **optional**.
+
 ```bash
-# 1. Install dependencies
 npm install
-
-# 2. Start the full-stack application (Express + Vite Dev Server)
-npm run dev
-
-# 3. Access the dashboard
-# Open your browser at http://localhost:3000
+cp .env.example .env      # optional: set GEMINI_API_KEY
+npm run dev               # http://localhost:3000
 ```
 
-### Resetting Demo Data
-At any time, click **"Reset Demo Data"** in the sidebar or run:
-```bash
-curl -X POST http://localhost:3000/api/reset
+Without `GEMINI_API_KEY` the app still works end to end. Free-text parsing, summaries, photo inspection and chat use the built-in fallbacks described above.
+
+---
+
+## 12. Project structure
+
 ```
-This restores all suppliers, active purchase orders, and logs to the baseline state for demonstration.
+server.ts                      Express app and all /api routes
+server/
+  agents/logisticsAgents.ts    Intake, Approval, Dispatch, Tracker, Chaser, Inspection/Outcome, Insight
+  mcpRegistry.ts               MCP tool declarations and executor
+  gemini.ts                    Gemini client with graceful fallback
+  db.ts                        In-memory store, seed data, supplier scoring
+src/
+  App.tsx                      Screen routing
+  components/                  Dashboard, Orders, Intake, Receiving Dock, Approvals, Suppliers, Copilot, MCP Inspector
+  types/logistics.ts           Shared types (order statuses, suppliers, emails)
+PRESENTATION.md                Presentation notes
+```
+
+---
+
+## 13. Known limitations
+
+- **Data is in memory.** It resets when the server restarts. A real deployment would use a database.
+- **Emails are simulated.** Purchase orders and reminders are written to the in-app mailbox, not sent through an email service.
+- **The scheduler runs on demand.** Tracker and Chaser run when `/api/scheduler/tick` is called, not on a background timer.
+- **No authentication.** Roles are screens, not logins.
+- **Demo numbers are illustrative.** Dashboard stats, the fallback weekly briefing and the figures in `PRESENTATION.md` (for example "48 hours to a few minutes" and "78.4% auto-approved") are seeded demo values, not measured results.
